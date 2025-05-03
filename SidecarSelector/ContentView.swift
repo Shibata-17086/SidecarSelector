@@ -12,7 +12,11 @@ struct ContentView: View {
     @State private var selectedDirection: Direction? = nil
     @State private var offsetX: CGFloat = 0
     @State private var offsetY: CGFloat = 0
-    @State private var showDetailSettings = false
+    @State private var showDetailSettings = false {
+        didSet {
+            NotificationCenter.default.post(name: .showDetailSettingsChanged, object: showDetailSettings)
+        }
+    }
     var body: some View {
         VStack(spacing: 20) {
             Text("Sidecarの位置を選択")
@@ -20,6 +24,13 @@ struct ContentView: View {
                 .padding(.top, 8)
             // 位置関係を表すアイコン表示
             ZStack {
+                // ルーラー（目盛り）を最背面に表示
+                RulerView(length: 260, isVertical: false) // 横
+                    .frame(height: 24)
+                    .offset(y: -60)
+                RulerView(length: 120, isVertical: true) // 縦
+                    .frame(width: 32)
+                    .offset(x: -120)
                 // ラップトップ（常に中央）
                 Image(systemName: "laptopcomputer")
                     .resizable()
@@ -189,6 +200,41 @@ struct ContentView: View {
             }
         }
         return nil
+    }
+}
+
+struct RulerView: View {
+    let spacing: CGFloat = 50
+    let length: CGFloat
+    let isVertical: Bool
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(0...Int(length/spacing), id: \.self) { i in
+                if isVertical {
+                    Path { path in
+                        let y = CGFloat(i) * spacing
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: 8, y: y))
+                    }
+                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                    Text("\(Int(CGFloat(i) * spacing))")
+                        .font(.system(size: 8))
+                        .foregroundColor(.gray)
+                        .position(x: 22, y: CGFloat(i) * spacing)
+                } else {
+                    Path { path in
+                        let x = CGFloat(i) * spacing
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: 8))
+                    }
+                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                    Text("\(Int(CGFloat(i) * spacing))")
+                        .font(.system(size: 8))
+                        .foregroundColor(.gray)
+                        .position(x: CGFloat(i) * spacing, y: 18)
+                }
+            }
+        }
     }
 }
 
