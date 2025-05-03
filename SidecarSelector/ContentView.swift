@@ -10,6 +10,9 @@ import CoreGraphics
 
 struct ContentView: View {
     @State private var selectedDirection: Direction? = nil
+    @State private var offsetX: CGFloat = 0
+    @State private var offsetY: CGFloat = 0
+    @State private var showDetailSettings = false
     var body: some View {
         VStack(spacing: 20) {
             Text("Sidecarの位置を選択")
@@ -49,7 +52,7 @@ struct ContentView: View {
                             .frame(width: 80, height: 46)
                             .foregroundColor(.blue)
                             .rotationEffect(.degrees(90))
-                            .offset(x: 0, y: -54)
+                            .offset(x: 0, y: -38)
                     case .down:
                         Image(systemName: "ipad")
                             .resizable()
@@ -57,7 +60,7 @@ struct ContentView: View {
                             .frame(width: 80, height: 46)
                             .foregroundColor(.blue)
                             .rotationEffect(.degrees(90))
-                            .offset(x: 0, y: 54)
+                            .offset(x: 0, y: 38)
                     }
                 }
             }
@@ -76,7 +79,7 @@ struct ContentView: View {
             .frame(width: 180)
             Button(action: {
                 if let dir = selectedDirection {
-                    moveSidecarDisplay(to: dir)
+                    moveSidecarDisplay(to: dir, offsetX: Int(offsetX), offsetY: Int(offsetY))
                 }
             }) {
                 Text("配置を変更")
@@ -85,6 +88,32 @@ struct ContentView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
             .disabled(selectedDirection == nil)
+            Button("詳細設定") {
+                showDetailSettings = true
+            }
+            .sheet(isPresented: $showDetailSettings) {
+                VStack(spacing: 20) {
+                    Text("詳細設定").font(.title2).padding()
+                    HStack {
+                        Text("Xオフセット")
+                        TextField("X", value: $offsetX, formatter: NumberFormatter())
+                            .frame(width: 80)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
+                    HStack {
+                        Text("Yオフセット")
+                        TextField("Y", value: $offsetY, formatter: NumberFormatter())
+                            .frame(width: 80)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
+                    Button("閉じる") {
+                        showDetailSettings = false
+                    }
+                    .padding(.top)
+                }
+                .padding(32)
+                .frame(width: 400)
+            }
         }
         .padding(24)
         .background(
@@ -99,23 +128,21 @@ struct ContentView: View {
         case left, right, up, down
     }
     
-    func moveSidecarDisplay(to direction: Direction) {
-        // SidecarディスプレイIDを取得
+    func moveSidecarDisplay(to direction: Direction, offsetX: Int, offsetY: Int) {
         if let sidecarID = findSidecarDisplayID() {
-            // メインディスプレイIDを取得
             let mainID = CGMainDisplayID()
             let mainBounds = CGDisplayBounds(mainID)
             let sidecarBounds = CGDisplayBounds(sidecarID)
             var newOrigin = CGPoint(x: 0, y: 0)
             switch direction {
             case .left:
-                newOrigin = CGPoint(x: Int(mainBounds.origin.x) - Int(sidecarBounds.size.width), y: Int(mainBounds.origin.y))
+                newOrigin = CGPoint(x: Int(mainBounds.origin.x) - Int(sidecarBounds.size.width) + offsetX, y: Int(mainBounds.origin.y) + offsetY)
             case .right:
-                newOrigin = CGPoint(x: Int(mainBounds.origin.x + mainBounds.size.width), y: Int(mainBounds.origin.y))
+                newOrigin = CGPoint(x: Int(mainBounds.origin.x + mainBounds.size.width) + offsetX, y: Int(mainBounds.origin.y) + offsetY)
             case .up:
-                newOrigin = CGPoint(x: Int(mainBounds.origin.x), y: Int(mainBounds.origin.y - sidecarBounds.size.height))
+                newOrigin = CGPoint(x: Int(mainBounds.origin.x) + offsetX, y: Int(mainBounds.origin.y - sidecarBounds.size.height) + offsetY)
             case .down:
-                newOrigin = CGPoint(x: Int(mainBounds.origin.x), y: Int(mainBounds.origin.y + mainBounds.size.height))
+                newOrigin = CGPoint(x: Int(mainBounds.origin.x) + offsetX, y: Int(mainBounds.origin.y + mainBounds.size.height) + offsetY)
             }
             var config: CGDisplayConfigRef?
             let err1 = CGBeginDisplayConfiguration(&config)
@@ -123,7 +150,7 @@ struct ContentView: View {
                 CGConfigureDisplayOrigin(config, sidecarID, Int32(newOrigin.x), Int32(newOrigin.y))
                 let err2 = CGCompleteDisplayConfiguration(config, .permanently)
                 if err2 == .success {
-                    print("Sidecarディスプレイ(ID: \(sidecarID))を\(direction)に移動しました")
+                    print("Sidecarディスプレイ(ID: \(sidecarID))を\(direction)に移動しました (offsetX: \(offsetX), offsetY: \(offsetY))")
                 } else {
                     print("ディスプレイ配置の適用に失敗: \(err2)")
                 }
