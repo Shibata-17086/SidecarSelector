@@ -17,6 +17,7 @@ struct ContentView: View {
             NotificationCenter.default.post(name: .showDetailSettingsChanged, object: showDetailSettings)
         }
     }
+    @State private var rulerOffset: (CGFloat, CGFloat)? = nil
     var body: some View {
         VStack(spacing: 20) {
             Text("Sidecarの位置を選択")
@@ -110,17 +111,18 @@ struct ContentView: View {
                         TextField("X", value: $offsetX, formatter: NumberFormatter())
                             .frame(width: 80)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Text("pt")
                     }
                     HStack {
                         Text("Yオフセット")
                         TextField("Y", value: $offsetY, formatter: NumberFormatter())
                             .frame(width: 80)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Text("pt")
                     }
                     Button("閉じる") {
                         showDetailSettings = false
                     }
-                    .padding(.top)
                 }
                 .padding(32)
                 .frame(width: 400)
@@ -133,6 +135,13 @@ struct ContentView: View {
                 .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         )
         .frame(width: 260)
+        .onReceive(NotificationCenter.default.publisher(for: .rulerOffsetChanged)) { notification in
+            if let dict = notification.object as? [String: Int],
+               let x = dict["offsetX"], let y = dict["offsetY"] {
+                offsetX = CGFloat(x)
+                offsetY = CGFloat(y)
+            }
+        }
     }
     
     enum Direction {
@@ -209,29 +218,50 @@ struct RulerView: View {
     let isVertical: Bool
     var body: some View {
         ZStack(alignment: .topLeading) {
+            // 補助目盛り（10ptごと、5分の1）
+            ForEach(0...Int(length/10), id: \.self) { i in
+                if i % 5 != 0 {
+                    if isVertical {
+                        Path { path in
+                            let y = CGFloat(i) * 10
+                            path.move(to: CGPoint(x: 0, y: y))
+                            path.addLine(to: CGPoint(x: 8, y: y))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                    } else {
+                        Path { path in
+                            let x = CGFloat(i) * 10
+                            path.move(to: CGPoint(x: x, y: 0))
+                            path.addLine(to: CGPoint(x: x, y: 8))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                    }
+                }
+            }
+            // 主目盛り（50ptごと）
             ForEach(0...Int(length/spacing), id: \.self) { i in
                 if isVertical {
                     Path { path in
                         let y = CGFloat(i) * spacing
                         path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: 8, y: y))
+                        path.addLine(to: CGPoint(x: 12, y: y))
                     }
-                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                    .stroke(Color.red, lineWidth: 2)
                     Text("\(Int(CGFloat(i) * spacing))")
-                        .font(.system(size: 8))
-                        .foregroundColor(.gray)
-                        .position(x: 22, y: CGFloat(i) * spacing)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.red)
+                        .position(x: 24, y: CGFloat(i) * spacing)
                 } else {
                     Path { path in
                         let x = CGFloat(i) * spacing
                         path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: 8))
+                        path.addLine(to: CGPoint(x: x, y: 12))
                     }
-                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                    .stroke(Color.red, lineWidth: 2)
                     Text("\(Int(CGFloat(i) * spacing))")
-                        .font(.system(size: 8))
-                        .foregroundColor(.gray)
-                        .position(x: CGFloat(i) * spacing, y: 18)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.red)
+                        .position(x: CGFloat(i) * spacing, y: 20)
                 }
             }
         }

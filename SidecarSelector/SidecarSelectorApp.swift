@@ -26,6 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var popover: NSPopover?
     var rulerWindow: NSWindow?
     var cancellable: AnyCancellable?
+    var offsetAdjustWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -85,7 +86,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showRulerWindow() {
         if let sidecarID = findSidecarDisplayID() {
             let bounds = CGDisplayBounds(sidecarID)
-            let screenRect = NSRect(x: bounds.origin.x, y: bounds.origin.y, width: bounds.size.width, height: bounds.size.height)
+            let menuBarHeight = NSStatusBar.system.thickness
+            let screenRect = NSRect(x: bounds.origin.x, y: bounds.origin.y + menuBarHeight, width: bounds.size.width, height: bounds.size.height - menuBarHeight)
             let window = NSWindow(
                 contentRect: screenRect,
                 styleMask: [.borderless],
@@ -97,7 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.level = .floating
             window.ignoresMouseEvents = true
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            window.contentView = NSHostingView(rootView: RulerOverlayView(width: bounds.size.width, height: bounds.size.height))
+            window.contentView = NSHostingView(rootView: RulerOverlayView(width: bounds.size.width, height: bounds.size.height - menuBarHeight))
             window.makeKeyAndOrderFront(nil)
             self.rulerWindow = window
         }
@@ -107,67 +109,213 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         rulerWindow?.orderOut(nil)
         rulerWindow = nil
     }
+
+    // オフセット調整用フルスクリーンウインドウを表示
+    func showOffsetAdjustWindow() {
+        if let sidecarID = findSidecarDisplayID() {
+            let bounds = CGDisplayBounds(sidecarID)
+            let menuBarHeight = NSStatusBar.system.thickness
+            let screenRect = NSRect(x: bounds.origin.x, y: bounds.origin.y + menuBarHeight, width: bounds.size.width, height: bounds.size.height - menuBarHeight)
+            let window = NSWindow(
+                contentRect: screenRect,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.isOpaque = false
+            window.backgroundColor = NSColor.clear
+            window.level = .screenSaver
+            window.ignoresMouseEvents = false
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            window.contentView = NSHostingView(rootView: OffsetAdjustView(width: bounds.size.width, height: bounds.size.height - menuBarHeight, onFinish: {
+                window.orderOut(nil)
+                self.offsetAdjustWindow = nil
+            }))
+            window.makeKeyAndOrderFront(nil)
+            self.offsetAdjustWindow = window
+        }
+    }
 }
 
 // Sidecarディスプレイ全体にルーラーを表示するView
 struct RulerOverlayView: View {
     let width: CGFloat
     let height: CGFloat
+    @State private var firstCorner: CGPoint? = nil
     var body: some View {
-        ZStack {
-            // 横補助目盛り（10ptごと、5分の1）
-            ForEach(0...Int(width/10), id: \.self) { i in
-                if i % 5 != 0 { // 50ptごとの主目盛りは除く
+        let centerX = width / 2
+        let centerY = height / 2
+        GeometryReader { geo in
+            ZStack {
+                // 横補助目盛り（10ptごと、5分の1）
+                ForEach(-Int(centerX/10)...Int(centerX/10), id: \.self) { i in
+                    if i % 5 != 0 {
+                        let x = width / 2 + CGFloat(i) * 10
+                        Path { path in
+                            path.move(to: CGPoint(x: x, y: 0))
+                            path.addLine(to: CGPoint(x: x, y: 20))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                        Path { path in
+                            path.move(to: CGPoint(x: x, y: height - 20))
+                            path.addLine(to: CGPoint(x: x, y: height))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                    }
+                }
+                // 縦補助目盛り（10ptごと、5分の1）
+                ForEach(-Int(centerY/10)...Int(centerY/10), id: \.self) { i in
+                    if i % 5 != 0 {
+                        let y = height / 2 + CGFloat(i) * 10
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: y))
+                            path.addLine(to: CGPoint(x: 20, y: y))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                        Path { path in
+                            path.move(to: CGPoint(x: width - 20, y: y))
+                            path.addLine(to: CGPoint(x: width, y: y))
+                        }
+                        .stroke(Color.orange, lineWidth: 1)
+                    }
+                }
+                // 横ルーラー
+                ForEach(-Int(centerX/50)...Int(centerX/50), id: \.self) { i in
+                    let x = width / 2 + CGFloat(i) * 50
                     Path { path in
-                        let x = CGFloat(i) * 10
                         path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: 20))
+                    }
+                    .stroke(Color.red, lineWidth: 2)
+                    Path { path in
+                        path.move(to: CGPoint(x: x, y: height - 20))
                         path.addLine(to: CGPoint(x: x, y: height))
                     }
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.red, lineWidth: 2)
+                    // 上辺
+                    Text("\(i * 50)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.red)
+                        .position(x: x, y: 32)
+                    // 下辺
+                    Text("\(i * 50)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.red)
+                        .position(x: x, y: height - 32)
                 }
-            }
-            // 縦補助目盛り（10ptごと、5分の1）
-            ForEach(0...Int(height/10), id: \.self) { i in
-                if i % 5 != 0 {
+                // 縦ルーラー
+                ForEach(-Int(centerY/50)...Int(centerY/50), id: \.self) { i in
+                    let y = height / 2 + CGFloat(i) * 50
                     Path { path in
-                        let y = CGFloat(i) * 10
                         path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: 20, y: y))
+                    }
+                    .stroke(Color.red, lineWidth: 2)
+                    Path { path in
+                        path.move(to: CGPoint(x: width - 20, y: y))
                         path.addLine(to: CGPoint(x: width, y: y))
                     }
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.red, lineWidth: 2)
+                    // 左辺
+                    Text("\(i * 50)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.red)
+                        .frame(width: 40, alignment: .trailing)
+                        .position(x: 34, y: y)
+                    // 右辺
+                    Text("\(i * 50)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.red)
+                        .frame(width: 40, alignment: .leading)
+                        .position(x: width - 34, y: y)
+                }
+                // 1点目が選択されている場合、点を表示
+                if let first = firstCorner {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 16, height: 16)
+                        .position(first)
                 }
             }
-            // 横ルーラー
-            ForEach(0...Int(width/50), id: \.self) { i in
-                Path { path in
-                    let x = CGFloat(i) * 50
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: height))
-                }
-                .stroke(Color.black.opacity(0.7), lineWidth: 2)
-                Text("\(Int(CGFloat(i) * 50))")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.black)
-                    .position(x: CGFloat(i) * 50 + 18, y: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                TapGesture()
+                    .onEnded { value in
+                        let mouseLocation = NSEvent.mouseLocation
+                        let windowOrigin = geo.frame(in: .global).origin
+                        let clickX = mouseLocation.x - windowOrigin.x
+                        let clickY = mouseLocation.y - windowOrigin.y
+                        let clickPoint = CGPoint(x: clickX, y: clickY)
+                        if firstCorner == nil {
+                            firstCorner = clickPoint
+                        } else {
+                            // 2点目クリック時、中点を中心に
+                            let midX = (firstCorner!.x + clickPoint.x) / 2
+                            let midY = (firstCorner!.y + clickPoint.y) / 2
+                            let offsetX = Int(midX - width / 2)
+                            let offsetY = Int(midY - height / 2)
+                            NotificationCenter.default.post(name: .rulerOffsetChanged, object: ["offsetX": offsetX, "offsetY": offsetY])
+                            firstCorner = nil
+                        }
+                    }
+            )
+        }
+    }
+}
+
+// オフセット調整専用のフルスクリーンView
+struct OffsetAdjustView: View {
+    let width: CGFloat
+    let height: CGFloat
+    let onFinish: () -> Void
+    @State private var firstCorner: CGPoint? = nil
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.2).ignoresSafeArea()
+            RulerOverlayView(width: width, height: height)
+            if let first = firstCorner {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 16, height: 16)
+                    .position(first)
             }
-            // 縦ルーラー
-            ForEach(0...Int(height/50), id: \.self) { i in
-                Path { path in
-                    let y = CGFloat(i) * 50
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: width, y: y))
+            VStack {
+                HStack {
+                    Spacer()
+                    Button("閉じる") {
+                        onFinish()
+                    }
+                    .padding()
                 }
-                .stroke(Color.black.opacity(0.7), lineWidth: 2)
-                Text("\(Int(CGFloat(i) * 50))")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.black)
-                    .position(x: 36, y: CGFloat(i) * 50 + 12)
+                Spacer()
             }
         }
+        .contentShape(Rectangle())
+        .gesture(
+            TapGesture()
+                .onEnded { _ in
+                    let mouseLocation = NSEvent.mouseLocation
+                    let clickX = mouseLocation.x
+                    let clickY = mouseLocation.y
+                    let clickPoint = CGPoint(x: clickX, y: clickY)
+                    if firstCorner == nil {
+                        firstCorner = clickPoint
+                    } else {
+                        let midX = (firstCorner!.x + clickPoint.x) / 2
+                        let midY = (firstCorner!.y + clickPoint.y) / 2
+                        let offsetX = Int(midX - width / 2)
+                        let offsetY = Int(midY - height / 2)
+                        NotificationCenter.default.post(name: .rulerOffsetChanged, object: ["offsetX": offsetX, "offsetY": offsetY])
+                        firstCorner = nil
+                        onFinish()
+                    }
+                }
+        )
     }
 }
 
 // Notification用拡張
 extension Notification.Name {
     static let showDetailSettingsChanged = Notification.Name("showDetailSettingsChanged")
+    static let rulerOffsetChanged = Notification.Name("rulerOffsetChanged")
 }
